@@ -324,6 +324,63 @@ button {
   .options-grid.col-3 { grid-template-columns:1fr 1fr; }
   .btn-option { padding:12px 14px; min-height:52px; }
 }
+
+/* ========== 学习区 ========== */
+.learn-tabs { display:flex; gap:8px; margin-bottom:16px; }
+.learn-tab {
+  flex:1; padding:12px 8px; border-radius:50px;
+  font-size:var(--font-sm); font-weight:700;
+  background:#f0f0f0; color:var(--text-light);
+  text-align:center; cursor:pointer; transition:all 0.2s;
+  border:none;
+}
+.learn-tab.active { background:var(--pink); color:#fff; }
+.learn-grid {
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(70px,1fr));
+  gap:10px; flex:1; align-content:start;
+}
+.learn-card {
+  background:#fff; border-radius:var(--radius-sm);
+  padding:14px 8px; text-align:center;
+  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+  cursor:pointer; transition:all 0.2s;
+  font-size:1.5rem; font-weight:900; color:var(--text);
+  min-height:56px; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:4px;
+  user-select:none; -webkit-user-select:none;
+}
+.learn-card:active { transform:scale(0.93); background:#FFF5F5; }
+.learn-card .speaker { font-size:0.9rem; }
+.learn-card.playing { background:var(--yellow); border:2px solid var(--orange); animation:pulse 0.6s infinite; }
+
+/* ========== 语音按钮 ========== */
+.speak-btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:64px; height:64px; border-radius:50%;
+  background:linear-gradient(135deg,#FFD3B6,#FF9A9E);
+  color:#fff; font-size:2rem; cursor:pointer;
+  box-shadow:0 4px 16px rgba(255,154,158,0.4);
+  transition:transform 0.15s; animation:pulse 2s infinite;
+  border:none;
+}
+.speak-btn:active { transform:scale(0.9); }
+.speak-btn.speaking { animation:none; background:linear-gradient(135deg,#FF9A9E,#FF6B6B); }
+.speak-hint { font-size:var(--font-sm); color:var(--text-light); margin-top:4px; }
+
+/* ========== 学习入口卡片 ========== */
+.learn-entry {
+  background:linear-gradient(135deg,#FFF3CD,#FFE0B2);
+  border-radius:var(--radius);
+  padding:clamp(14px,2vw,20px);
+  display:flex; align-items:center; gap:12px;
+  cursor:pointer; margin-bottom:4px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+  border:2px dashed #E8C56D;
+}
+.learn-entry:active { transform:scale(0.97); }
+.learn-entry .icon { font-size:2.2rem; }
+.learn-entry .info h3 { font-size:var(--font-md); }
+.learn-entry .info span { font-size:var(--font-sm); color:var(--text-light); }
 </style>
 </head>
 <body>
@@ -369,7 +426,26 @@ button {
       <button class="back-btn" onclick="goHome()">←</button>
       <h2>🔤 拼音闯关</h2>
     </div>
+    <div class="learn-entry anim-fadeInUp" onclick="showScreen('pinyin-learn');renderLearn('shengmu')">
+      <div class="icon">📖</div>
+      <div class="info"><h3>学习拼音</h3><span>先学再闯关，点读发声</span></div>
+      <div style="font-size:1.5rem">▶</div>
+    </div>
     <div class="stage-list" id="pinyin-stages"></div>
+  </div>
+
+  <!-- ========== 拼音学习界面 ========== -->
+  <div class="screen" id="screen-pinyin-learn">
+    <div class="module-header">
+      <button class="back-btn" onclick="stopSpeak();openModule('pinyin')">←</button>
+      <h2>📖 拼音学习</h2>
+    </div>
+    <div class="learn-tabs">
+      <button class="learn-tab active" id="tab-shengmu" onclick="renderLearn('shengmu')">声母 (23)</button>
+      <button class="learn-tab" id="tab-yunmu" onclick="renderLearn('yunmu')">韵母 (24)</button>
+      <button class="learn-tab" id="tab-yinjie" onclick="renderLearn('yinjie')">拼读</button>
+    </div>
+    <div class="learn-grid" id="learn-grid"></div>
   </div>
 
   <!-- ========== 数学模块首页 ========== -->
@@ -469,6 +545,57 @@ function pick(arr) { return arr[rand(0,arr.length-1)]; }
 function shuffle(arr) { const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=rand(0,i);[a[i],a[j]]=[a[j],a[i]]; } return a; }
 function randDistinct(arr, count) { return shuffle(arr).slice(0,count); }
 
+// ===================== 语音引擎 =====================
+const SPEAK_MAP = {
+  'b':'bō','p':'pō','m':'mō','f':'fō',
+  'd':'dē','t':'tē','n':'nē','l':'lē',
+  'g':'gē','k':'kē','h':'hē',
+  'j':'jī','q':'qī','x':'xī',
+  'zh':'zhī','ch':'chī','sh':'shī','r':'rì',
+  'z':'zī','c':'cī','s':'sī',
+  'y':'yī','w':'wū',
+};
+function toSpeakable(pinyin) {
+  if (SPEAK_MAP[pinyin]) return SPEAK_MAP[pinyin];
+  if (pinyin.length <= 2) return pinyin;
+  return pinyin;
+}
+let _speakTimer = null;
+function speakPinyin(text, btnEl) {
+  stopSpeak();
+  if (!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(toSpeakable(text));
+  u.lang = 'zh-CN'; u.rate = 0.8; u.pitch = 1.1;
+  if (btnEl) btnEl.classList.add('speaking');
+  u.onend = ()=>{ if(btnEl) btnEl.classList.remove('speaking'); };
+  u.onerror = ()=>{ if(btnEl) btnEl.classList.remove('speaking'); };
+  window.speechSynthesis.speak(u);
+  _speakTimer = setTimeout(()=>{ if(btnEl) btnEl.classList.remove('speaking'); }, 3000);
+}
+function stopSpeak() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (_speakTimer) clearTimeout(_speakTimer);
+  document.querySelectorAll('.speaking').forEach(e=>e.classList.remove('speaking'));
+}
+
+// ===================== 学习区渲染 =====================
+function renderLearn(type) {
+  stopSpeak();
+  document.querySelectorAll('.learn-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+type).classList.add('active');
+  let items;
+  if (type === 'shengmu') items = SHENGMU;
+  else if (type === 'yunmu') items = YUNMU;
+  else items = SYLLABLES.slice(0, 30); // 展示30个常用音节
+  const grid = document.getElementById('learn-grid');
+  grid.innerHTML = items.map(p=>`
+    <div class="learn-card anim-fadeInUp" onclick="speakPinyin('${p}', this)" title="点击听发音">
+      <span>${p}</span>
+      <span class="speaker">🔊</span>
+    </div>
+  `).join('');
+}
+
 // ===================== 屏幕切换 =====================
 
 function showScreen(id) {
@@ -547,7 +674,8 @@ function genShengmuQ() {
   const correct = pick(SHENGMU);
   const distractors = randDistinct(SHENGMU.filter(s=>s!==correct), 3);
   return {
-    prompt: '请选出这个声母：',
+    prompt: '听发音，选出你听到的声母：',
+    speakText: correct,
     visual: correct,
     options: shuffle([correct, ...distractors]),
     answer: correct,
@@ -558,7 +686,8 @@ function genYunmuQ() {
   const correct = pick(YUNMU);
   const distractors = randDistinct(YUNMU.filter(s=>s!==correct), 3);
   return {
-    prompt: '请选出这个韵母：',
+    prompt: '听发音，选出你听到的韵母：',
+    speakText: correct,
     visual: correct,
     options: shuffle([correct, ...distractors]),
     answer: correct,
@@ -567,7 +696,6 @@ function genYunmuQ() {
 
 function genSpellQ() {
   const correct = pick(SYLLABLES);
-  // 生成干扰项：改声母或韵母
   const distractors = new Set();
   while (distractors.size < 3) {
     const method = rand(0,2);
@@ -578,7 +706,8 @@ function genSpellQ() {
     if (d !== correct && d.length <= 6) distractors.add(d);
   }
   return {
-    prompt: '这个音节怎么读？选出正确拼写：',
+    prompt: '听发音，选出你听到的音节：',
+    speakText: correct,
     visual: correct,
     options: shuffle([correct, ...Array.from(distractors)]),
     answer: correct,
@@ -691,6 +820,7 @@ function exitGame() {
 // ===================== 渲染题目 =====================
 
 function renderQuestion() {
+  stopSpeak();
   const stageDef = STATE.module === 'pinyin'
     ? PINYIN_STAGES[STATE.stageIndex]
     : MATH_STAGES[STATE.stageIndex];
@@ -710,10 +840,8 @@ function renderQuestion() {
   let visualHtml = '';
 
   if (question.visualEmojis) {
-    // 看图数数
     visualHtml = `<div class="emoji-count">${question.visualEmojis.join('')}</div>`;
   } else if (question.aEmojis !== undefined) {
-    // 比大小
     visualHtml = `<div class="compare-group">
       <div class="compare-box"><div class="emojis">${question.aEmojis}</div><div class="num">${question.a}</div></div>
       <div class="compare-vs">?</div>
@@ -723,10 +851,19 @@ function renderQuestion() {
     visualHtml = `<div class="question-visual">${question.visual}</div>`;
   }
 
+  // 语音按钮（拼音题有 speakText 字段）
+  const speakHtml = question.speakText ? `
+    <button class="speak-btn" id="speak-btn" onclick="speakPinyin('${question.speakText}', this)" title="点我重新播放">
+      🔊
+    </button>
+    <div class="speak-hint">点击喇叭听发音</div>
+  ` : '';
+
   const cols = question.options.length === 3 ? 'col-3' : '';
 
   area.innerHTML = `
     <div class="question-prompt anim-fadeInUp">${question.prompt}</div>
+    ${speakHtml}
     ${visualHtml}
     <div class="options-grid ${cols}">
       ${question.options.map((opt,i)=>`
@@ -734,6 +871,14 @@ function renderQuestion() {
       `).join('')}
     </div>
   `;
+
+  // 拼音题自动播放发音
+  if (question.speakText) {
+    setTimeout(()=>{
+      const btn = document.getElementById('speak-btn');
+      speakPinyin(question.speakText, btn);
+    }, 300);
+  }
 }
 
 function escapeHtml(str) {
@@ -745,6 +890,7 @@ function escapeHtml(str) {
 function submitAnswer(btn, userAnswer) {
   if (STATE.answered) return;
   STATE.answered = true;
+  stopSpeak();
 
   const isCorrect = userAnswer === STATE.currentAnswer;
 
