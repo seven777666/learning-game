@@ -546,18 +546,48 @@ function shuffle(arr) { const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j
 function randDistinct(arr, count) { return shuffle(arr).slice(0,count); }
 
 // ===================== 语音引擎 =====================
-const SPEAK_MAP = {
-  'b':'bō','p':'pō','m':'mō','f':'fō',
-  'd':'dē','t':'tē','n':'nē','l':'lē',
-  'g':'gē','k':'kē','h':'hē',
-  'j':'jī','q':'qī','x':'xī',
-  'zh':'zhī','ch':'chī','sh':'shī','r':'rì',
-  'z':'zī','c':'cī','s':'sī',
-  'y':'yī','w':'wū',
+// 用汉字映射让中文TTS引擎正确发音（直接读拼音字母会被当成英文）
+const PINYIN_AUDIO_MAP = {
+  // 声母 (23个) — 用含有该声母的常见汉字
+  'b':'播','p':'泼','m':'摸','f':'佛',
+  'd':'得','t':'特','n':'呢','l':'勒',
+  'g':'哥','k':'科','h':'喝',
+  'j':'鸡','q':'七','x':'西',
+  'zh':'知','ch':'吃','sh':'诗','r':'日',
+  'z':'资','c':'刺','s':'丝',
+  'y':'衣','w':'乌',
+  // 韵母 (24个)
+  'a':'啊','o':'喔','e':'鹅','i':'衣','u':'乌','ü':'迂',
+  'ai':'哀','ei':'诶','ui':'威','ao':'凹','ou':'欧','iu':'优',
+  'ie':'耶','üe':'约','er':'儿',
+  'an':'安','en':'恩','in':'因','un':'温','ün':'晕',
+  'ang':'昂','eng':'亨','ing':'英','ong':'轰',
+  // 音节 (65个)
+  'ba':'八','bo':'播','bi':'笔','bu':'不',
+  'pa':'趴','po':'泼','pi':'批','pu':'铺',
+  'ma':'妈','mo':'摸','me':'么','mi':'米','mu':'木',
+  'fa':'发','fo':'佛','fu':'夫',
+  'da':'大','de':'得','di':'地','du':'读',
+  'ta':'他','te':'特','ti':'提','tu':'土',
+  'na':'那','ne':'呢','ni':'你','nu':'努','nü':'女',
+  'la':'拉','le':'乐','li':'里','lu':'路','lü':'绿',
+  'ga':'嘎','ge':'哥','gu':'古',
+  'ha':'哈','he':'喝','hu':'呼',
+  'ji':'鸡','ju':'居','qi':'七','qu':'区','xi':'西','xu':'需',
+  'zha':'扎','zhe':'这','zhi':'知','zhu':'猪',
+  'cha':'插','che':'车','chi':'吃','chu':'出',
+  'sha':'沙','she':'蛇','shi':'诗','shu':'书',
+  're':'热','ri':'日','ru':'如',
+  'za':'杂','ze':'则','zi':'资','zu':'足',
+  'ca':'擦','ce':'册','ci':'刺','cu':'粗',
+  'sa':'撒','se':'色','si':'丝','su':'苏',
+  'ya':'鸭','ye':'耶','yi':'衣','yu':'鱼',
+  'wa':'蛙','wo':'我','wu':'乌',
 };
 function toSpeakable(pinyin) {
-  if (SPEAK_MAP[pinyin]) return SPEAK_MAP[pinyin];
-  if (pinyin.length <= 2) return pinyin;
+  if (PINYIN_AUDIO_MAP[pinyin]) return PINYIN_AUDIO_MAP[pinyin];
+  // 对未映射的项，尝试拆成声母+韵母组合朗读
+  // 但更可靠的是直接返回原字符让TTS尝试
   return pinyin;
 }
 let _speakTimer = null;
