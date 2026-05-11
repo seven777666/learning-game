@@ -450,7 +450,8 @@ button {
     <div class="learn-tabs">
       <button class="learn-tab active" id="tab-shengmu" onclick="renderLearn('shengmu')">声母 (23)</button>
       <button class="learn-tab" id="tab-yunmu" onclick="renderLearn('yunmu')">韵母 (24)</button>
-      <button class="learn-tab" id="tab-yinjie" onclick="renderLearn('yinjie')">拼读</button>
+      <button class="learn-tab" id="tab-yinjie" onclick="renderLearn('yinjie')">简单拼读</button>
+      <button class="learn-tab" id="tab-yinjie2" onclick="renderLearn('yinjie2')">进阶拼读</button>
     </div>
     <div class="learn-grid" id="learn-grid"></div>
   </div>
@@ -515,8 +516,8 @@ const STATE = {
   currentAnswer: null,
   answered: false,
   // 各模块关卡完成状态: 'locked' | 'current' | 'done'
-  pinyinStages: ['current','locked','locked'],
-  mathStages: ['current','locked','locked'],
+  pinyinStages: ['current','locked','locked','locked','locked'],
+  mathStages: ['current','locked','locked','locked','locked','locked'],
 };
 
 // ===================== 题库 =====================
@@ -527,15 +528,32 @@ const SHENGMU = ['b','p','m','f','d','t','n','l','g','k','h','j','q','x','zh','c
 // 韵母表（24个）
 const YUNMU = ['a','o','e','i','u','ü','ai','ei','ui','ao','ou','iu','ie','üe','er','an','en','in','un','ün','ang','eng','ing','ong'];
 
-// 可拼读音节（声母+韵母组合，排除不合理的）
-const SYLLABLES = [
+// 简单拼读音节（2字母，适合入门）
+const SYLLABLES_EASY = [
   'ba','bo','bi','bu','pa','po','pi','pu','ma','mo','me','mi','mu',
   'fa','fo','fu','da','de','di','du','ta','te','ti','tu','na','ne','ni','nu','nü',
   'la','le','li','lu','lü','ga','ge','gu','ha','he','hu',
-  'ji','ju','qi','qu','xi','xu','zha','zhe','zhi','zhu','cha','che','chi','chu',
-  'sha','she','shi','shu','re','ri','ru','za','ze','zi','zu',
-  'ca','ce','ci','cu','sa','se','si','su','ya','ye','yi','yu','wa','wo','wu',
+  'ji','ju','qi','qu','xi','xu',
+  'za','ze','zi','zu','ca','ce','ci','cu','sa','se','si','su',
+  'ya','ye','yi','yu','wa','wo','wu',
 ];
+
+// 进阶拼读音节（含 zh/ch/sh 或三字母组合）
+const SYLLABLES_HARD = [
+  'zha','zhe','zhi','zhu','zhua','zhuo','zhui','zhuai',
+  'cha','che','chi','chu','chua','chuo','chui','chuai',
+  'sha','she','shi','shu','shua','shuo','shui','shuai',
+  're','ri','ru','ruo','rui',
+  'gua','guo','gui','guai','kua','kuo','kui','kuai',
+  'hua','huo','hui','huai','jia','jie','jiao','jiu',
+  'qia','qie','qiao','qiu','xia','xie','xiao','xiu',
+  'lia','lie','liao','liu','nia','nie','niao','niu',
+  'duan','tuan','nuan','luan','guan','kuan','huan',
+  'zhuang','chuang','shuang','jiong','qiong','xiong',
+];
+
+// 全部音节
+const SYLLABLES = [...SYLLABLES_EASY, ...SYLLABLES_HARD];
 
 // 鼓励语
 const CHEER_WORDS = [
@@ -638,6 +656,23 @@ const PINYIN_AUDIO_MAP = {
   'sa':'撒','se':'色','si':'丝','su':'苏',
   'ya':'鸭','ye':'耶','yi':'衣','yu':'鱼',
   'wa':'蛙','wo':'我','wu':'乌',
+  // 进阶音节
+  'zhua':'抓','zhuo':'桌','zhui':'追','zhuai':'拽',
+  'chua':'欻','chuo':'戳','chui':'吹','chuai':'揣',
+  'shua':'刷','shuo':'说','shui':'水','shuai':'摔',
+  'ruo':'弱','rui':'瑞',
+  'gua':'瓜','guo':'锅','gui':'龟','guai':'乖',
+  'kua':'夸','kuo':'扩','kui':'亏','kuai':'快',
+  'hua':'花','huo':'火','hui':'灰','huai':'坏',
+  'jia':'家','jie':'街','jiao':'交','jiu':'九',
+  'qia':'掐','qie':'切','qiao':'敲','qiu':'秋',
+  'xia':'虾','xie':'些','xiao':'小','xiu':'修',
+  'lia':'俩','lie':'列','liao':'了','liu':'六',
+  'nia':'','nie':'捏','niao':'鸟','niu':'牛',
+  'duan':'端','tuan':'团','nuan':'暖','luan':'乱',
+  'guan':'关','kuan':'宽','huan':'欢',
+  'zhuang':'装','chuang':'窗','shuang':'双',
+  'jiong':'窘','qiong':'穷','xiong':'兄',
 };
 function toSpeakable(pinyin) {
   if (PINYIN_AUDIO_MAP[pinyin]) return PINYIN_AUDIO_MAP[pinyin];
@@ -671,7 +706,9 @@ function renderLearn(type) {
   let items;
   if (type === 'shengmu') items = SHENGMU;
   else if (type === 'yunmu') items = YUNMU;
-  else items = SYLLABLES.slice(0, 30); // 展示30个常用音节
+  else if (type === 'yinjie') items = SYLLABLES_EASY;
+  else if (type === 'yinjie2') items = SYLLABLES_HARD;
+  else items = SYLLABLES;
   const grid = document.getElementById('learn-grid');
   grid.innerHTML = items.map(p=>`
     <div class="learn-card anim-fadeInUp" onclick="speakPinyin('${p}', this)" title="点击听发音">
@@ -710,7 +747,7 @@ function openModule(mod) {
     // 只在首次进入时初始化（没有任何已完成关卡）
     const hasProgress = STATE.pinyinStages.some(s => s === 'done');
     if (!hasProgress) {
-      STATE.pinyinStages = ['current','locked','locked'];
+      STATE.pinyinStages = ['current','locked','locked','locked','locked'];
     }
     // 防御：万一全锁了，打开第一关
     if (STATE.pinyinStages.every(s => s === 'locked')) {
@@ -721,7 +758,7 @@ function openModule(mod) {
   } else {
     const hasProgress = STATE.mathStages.some(s => s === 'done');
     if (!hasProgress) {
-      STATE.mathStages = ['current','locked','locked'];
+      STATE.mathStages = ['current','locked','locked','locked','locked','locked'];
     }
     if (STATE.mathStages.every(s => s === 'locked')) {
       STATE.mathStages[0] = 'current';
@@ -771,15 +808,20 @@ function renderStages(mod) {
 // ===================== 关卡定义 =====================
 
 const PINYIN_STAGES = [
-  { name:'第一关：声母识别', desc:'认识声母宝宝', difficulty:'简单', gen:genShengmuQ, genParams:null },
-  { name:'第二关：韵母识别', desc:'认识韵母宝宝', difficulty:'简单', gen:genYunmuQ, genParams:null },
-  { name:'第三关：拼音拼读', desc:'声母+韵母拼一拼', difficulty:'中等', gen:genSpellQ, genParams:null },
+  { name:'第一关：声母宝宝', desc:'认识23个声母', difficulty:'⭐', gen:genShengmuQ, genParams:null },
+  { name:'第二关：韵母宝宝', desc:'认识24个韵母', difficulty:'⭐⭐', gen:genYunmuQ, genParams:null },
+  { name:'第三关：简单拼读', desc:'声母+韵母拼一拼', difficulty:'⭐⭐⭐', gen:genSpellEasyQ, genParams:null },
+  { name:'第四关：进阶拼读', desc:'含 zh/ch/sh 的音节', difficulty:'⭐⭐⭐⭐', gen:genSpellHardQ, genParams:null },
+  { name:'第五关：拼读挑战', desc:'随机混合拼读', difficulty:'⭐⭐⭐⭐⭐', gen:genSpellQ, genParams:null },
 ];
 
 const MATH_STAGES = [
-  { name:'第一关：看图数数', desc:'数一数有几个', difficulty:'简单', gen:genCountQ, genParams:{min:1,max:7} },
-  { name:'第二关：加减法', desc:'20以内算一算', difficulty:'中等', gen:genCalcQ, genParams:{min:1,max:10} },
-  { name:'第三关：比大小', desc:'哪个多哪个少', difficulty:'困难', gen:genCompareQ, genParams:{min:1,max:5} },
+  { name:'第一关：数一数入门', desc:'数 1~5 个', difficulty:'⭐', gen:genCountQ, genParams:{min:1,max:5} },
+  { name:'第二关：数一数进阶', desc:'数 5~12 个', difficulty:'⭐⭐', gen:genCountQ, genParams:{min:5,max:12} },
+  { name:'第三关：加减法入门', desc:'5以内算一算', difficulty:'⭐⭐⭐', gen:genCalcQ, genParams:{min:1,max:5} },
+  { name:'第四关：加减法挑战', desc:'15以内算一算', difficulty:'⭐⭐⭐⭐', gen:genCalcQ, genParams:{min:1,max:15} },
+  { name:'第五关：比大小入门', desc:'1~5比一比', difficulty:'⭐⭐⭐⭐⭐', gen:genCompareQ, genParams:{min:1,max:5} },
+  { name:'第六关：比大小对决', desc:'1~12比一比', difficulty:'⭐⭐⭐⭐⭐⭐', gen:genCompareQ, genParams:{min:3,max:12} },
 ];
 
 // ---- 拼音题目生成 ----
@@ -817,6 +859,45 @@ function genSpellQ() {
     if (method === 0) { d = pick(SHENGMU) + correct.slice(-1); }
     else if (method === 1) { d = correct[0] + pick(YUNMU); }
     else { d = pick(SYLLABLES); }
+    if (d !== correct && d.length <= 6) distractors.add(d);
+  }
+  return {
+    prompt: '听发音，选出你听到的音节：',
+    speakText: correct,
+    visual: correct,
+    options: shuffle([correct, ...Array.from(distractors)]),
+    answer: correct,
+  };
+}
+
+function genSpellEasyQ() {
+  const correct = pick(SYLLABLES_EASY);
+  const distractors = new Set();
+  while (distractors.size < 3) {
+    const method = rand(0,1);
+    let d;
+    if (method === 0) { d = pick(SHENGMU) + correct.slice(-1); }
+    else { d = pick(SYLLABLES_EASY); }
+    if (d !== correct && d.length <= 4) distractors.add(d);
+  }
+  return {
+    prompt: '听发音，选出你听到的音节：',
+    speakText: correct,
+    visual: correct,
+    options: shuffle([correct, ...Array.from(distractors)]),
+    answer: correct,
+  };
+}
+
+function genSpellHardQ() {
+  const correct = pick(SYLLABLES_HARD);
+  const distractors = new Set();
+  while (distractors.size < 3) {
+    const method = rand(0,2);
+    let d;
+    if (method === 0) { d = pick(SHENGMU) + correct.slice(-1); }
+    else if (method === 1) { d = correct[0] + pick(YUNMU); }
+    else { d = pick(SYLLABLES_HARD); }
     if (d !== correct && d.length <= 6) distractors.add(d);
   }
   return {
