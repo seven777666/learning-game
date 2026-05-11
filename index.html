@@ -128,6 +128,9 @@ button {
   margin:8px 0;
 }
 .home-header .subtitle { font-size:var(--font-sm); color:var(--text-light); }
+.stats-bar { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom: 12px; }
+.stat-chip { background:var(--card); border-radius:50px; padding:8px 18px; font-size:var(--font-sm); box-shadow:0 2px 8px rgba(0,0,0,0.06); white-space:nowrap; }
+.stat-chip span { font-weight:900; color:var(--pink); }
 
 .module-cards {
   display:flex; flex-direction:column; gap:16px;
@@ -182,7 +185,7 @@ button {
 .stage-info { flex:1; }
 .stage-info h3 { font-size:var(--font-md); margin-bottom:2px; }
 .stage-info span { font-size:var(--font-sm); color:var(--text-light); }
-.stage-star { font-size:1.5rem; }
+.stage-status-icon { font-size: 1.8rem; flex-shrink: 0; margin-left: auto; }
 
 /* ========== 游戏界面 ========== */
 .game-header {
@@ -400,6 +403,10 @@ button {
       <h1>学习闯关大冒险</h1>
       <p class="subtitle">幼小衔接 · 边玩边学</p>
     </div>
+    <div class="stats-bar" id="home-stats">
+      <div class="stat-chip">📊 今日答题: <span>0</span>/<span>0</span></div>
+      <div class="stat-chip">🏆 累计通关: <span>0</span>关</div>
+    </div>
     <div class="module-cards">
       <div class="module-card anim-fadeInUp" onclick="openModule('pinyin')" style="animation-delay:0.1s">
         <div class="icon">🔤</div>
@@ -437,7 +444,7 @@ button {
   <!-- ========== 拼音学习界面 ========== -->
   <div class="screen" id="screen-pinyin-learn">
     <div class="module-header">
-      <button class="back-btn" onclick="stopSpeak();openModule('pinyin')">←</button>
+      <button class="back-btn" onclick="stopSpeak();returnToModuleHome()">←</button>
       <h2>📖 拼音学习</h2>
     </div>
     <div class="learn-tabs">
@@ -496,6 +503,7 @@ button {
 
 // ---- 可配置项 ----
 const QUESTION_PER_STAGE = 10;
+const PASS_THRESHOLD = 7; // 答对7题即可过关
 
 // ---- 全局状态 ----
 const STATE = {
@@ -544,6 +552,53 @@ function rand(min, max) { return Math.floor(Math.random()*(max-min+1))+min; }
 function pick(arr) { return arr[rand(0,arr.length-1)]; }
 function shuffle(arr) { const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=rand(0,i);[a[i],a[j]]=[a[j],a[i]]; } return a; }
 function randDistinct(arr, count) { return shuffle(arr).slice(0,count); }
+
+// ===================== 学习统计 (localStorage) =====================
+
+function getStats() {
+  try { const raw = localStorage.getItem('learning_stats'); return raw ? JSON.parse(raw) : null; }
+  catch(e) { return null; }
+}
+function saveStats(stats) {
+  try { localStorage.setItem('learning_stats', JSON.stringify(stats)); } catch(e) {}
+}
+function ensureStats() {
+  const today = new Date().toISOString().slice(0,10);
+  let stats = getStats();
+  if (!stats || stats.date !== today) {
+    stats = {
+      date: today,
+      todayQuestionCount: 0,
+      todayCorrectCount: 0,
+      totalStagesCleared: stats ? stats.totalStagesCleared : 0,
+    };
+    saveStats(stats);
+  }
+  return stats;
+}
+function recordAnswer(correct) {
+  const stats = ensureStats();
+  stats.todayQuestionCount++;
+  if (correct) stats.todayCorrectCount++;
+  saveStats(stats);
+}
+function recordStageCleared() {
+  const stats = ensureStats();
+  stats.totalStagesCleared++;
+  saveStats(stats);
+}
+function updateStatsDisplay() {
+  const stats = getStats() || { todayQuestionCount:0, todayCorrectCount:0, totalStagesCleared:0 };
+  const homeStats = document.getElementById('home-stats');
+  if (homeStats) {
+    const spans = homeStats.querySelectorAll('span');
+    if (spans.length >= 3) {
+      spans[0].textContent = stats.todayQuestionCount;
+      spans[1].textContent = stats.todayCorrectCount;
+      spans[2].textContent = stats.totalStagesCleared;
+    }
+  }
+}
 
 // ===================== 语音引擎 =====================
 // 用汉字映射让中文TTS引擎正确发音（直接读拼音字母会被当成英文）
@@ -636,6 +691,7 @@ function showScreen(id) {
 
 function goHome() {
   hideFeedback();
+  updateStatsDisplay();
   showScreen('home');
 }
 
@@ -651,13 +707,40 @@ function openModule(mod) {
   STATE.answered = false;
 
   if (mod === 'pinyin') {
-    STATE.pinyinStages = ['current','locked','locked'];
+    // 只在首次进入时初始化（没有任何已完成关卡）
+    const hasProgress = STATE.pinyinStages.some(s => s === 'done');
+    if (!hasProgress) {
+      STATE.pinyinStages = ['current','locked','locked'];
+    }
+    // 防御：万一全锁了，打开第一关
+    if (STATE.pinyinStages.every(s => s === 'locked')) {
+      STATE.pinyinStages[0] = 'current';
+    }
     renderStages('pinyin');
     showScreen('pinyin-home');
   } else {
-    STATE.mathStages = ['current','locked','locked'];
+    const hasProgress = STATE.mathStages.some(s => s === 'done');
+    if (!hasProgress) {
+      STATE.mathStages = ['current','locked','locked'];
+    }
+    if (STATE.mathStages.every(s => s === 'locked')) {
+      STATE.mathStages[0] = 'current';
+    }
     renderStages('math');
     showScreen('math-home');
+  }
+}
+
+function returnToModuleHome() {
+  hideFeedback();
+  if (STATE.module === 'pinyin') {
+    renderStages('pinyin');
+    showScreen('pinyin-home');
+  } else if (STATE.module === 'math') {
+    renderStages('math');
+    showScreen('math-home');
+  } else {
+    goHome();
   }
 }
 
@@ -669,16 +752,17 @@ function renderStages(mod) {
   let html = '';
   stageDefs.forEach((s,i)=>{
     const status = stages[i];
-    let cls = '', starHtml = '';
-    if (status === 'locked') cls = 'locked';
-    if (status === 'done') { starHtml = '<span class="stage-star">⭐</span>'; }
+    let cls = '', iconHtml = '';
+    if (status === 'locked') { cls = 'locked'; iconHtml = '<span class="stage-status-icon">🔒</span>'; }
+    if (status === 'current') { iconHtml = '<span class="stage-status-icon">▶</span>'; }
+    if (status === 'done') { iconHtml = '<span class="stage-status-icon">✓</span>'; }
     const numCls = status === 'done' ? 'done' : status === 'current' ? 'current' : 'pending';
     const numText = status === 'done' ? '✓' : (i+1);
 
     html += `<div class="stage-item ${cls} anim-fadeInUp" onclick="startStage('${mod}',${i})" style="animation-delay:${i*0.1}s">
       <div class="stage-num ${numCls}">${numText}</div>
-      <div class="stage-info"><h3>${s.name}</h3><span>${s.desc}</span></div>
-      ${starHtml}
+      <div class="stage-info"><h3>${s.name}</h3><span>${s.desc} · ${s.difficulty || ''}</span></div>
+      ${iconHtml}
     </div>`;
   });
   document.getElementById(containerId).innerHTML = html;
@@ -687,15 +771,15 @@ function renderStages(mod) {
 // ===================== 关卡定义 =====================
 
 const PINYIN_STAGES = [
-  { name:'第一关：声母识别', desc:'认识声母宝宝', gen:genShengmuQ },
-  { name:'第二关：韵母识别', desc:'认识韵母宝宝', gen:genYunmuQ },
-  { name:'第三关：拼音拼读', desc:'声母+韵母拼一拼', gen:genSpellQ },
+  { name:'第一关：声母识别', desc:'认识声母宝宝', difficulty:'简单', gen:genShengmuQ, genParams:null },
+  { name:'第二关：韵母识别', desc:'认识韵母宝宝', difficulty:'简单', gen:genYunmuQ, genParams:null },
+  { name:'第三关：拼音拼读', desc:'声母+韵母拼一拼', difficulty:'中等', gen:genSpellQ, genParams:null },
 ];
 
 const MATH_STAGES = [
-  { name:'第一关：看图数数', desc:'数一数有几个', gen:genCountQ },
-  { name:'第二关：加减法', desc:'20以内算一算', gen:genCalcQ },
-  { name:'第三关：比大小', desc:'哪个多哪个少', gen:genCompareQ },
+  { name:'第一关：看图数数', desc:'数一数有几个', difficulty:'简单', gen:genCountQ, genParams:{min:1,max:7} },
+  { name:'第二关：加减法', desc:'20以内算一算', difficulty:'中等', gen:genCalcQ, genParams:{min:1,max:10} },
+  { name:'第三关：比大小', desc:'哪个多哪个少', difficulty:'困难', gen:genCompareQ, genParams:{min:1,max:5} },
 ];
 
 // ---- 拼音题目生成 ----
@@ -748,14 +832,15 @@ function genSpellQ() {
 
 const COUNT_EMOJIS = ['🍎','🍊','🍋','🍇','🍓','🍒','🍑','🥝','🍌','🐶','🐱','🐰','🐼','🐨','🐸'];
 
-function genCountQ() {
-  const count = rand(3, 15);
+function genCountQ(params) {
+  const range = params || {min:3, max:15};
+  const count = rand(range.min, range.max);
   const emoji = pick(COUNT_EMOJIS);
   const emojis = Array(count).fill(emoji);
   const answer = count;
   const distractors = new Set();
   while (distractors.size < 3) {
-    const d = rand(1, 15);
+    const d = rand(range.min, range.max);
     if (d !== count) distractors.add(d);
   }
   return {
@@ -766,23 +851,24 @@ function genCountQ() {
   };
 }
 
-function genCalcQ() {
+function genCalcQ(params) {
+  const range = params || {min:1, max:20};
   const isAdd = Math.random() > 0.5;
   let a, b, answer;
   if (isAdd) {
-    answer = rand(2, 20);
-    a = rand(1, answer - 1);
+    answer = rand(range.min + 1, range.max);
+    a = rand(range.min, answer - 1);
     b = answer - a;
   } else {
-    a = rand(2, 20);
-    b = rand(1, a);
+    a = rand(range.min + 1, range.max);
+    b = rand(range.min, a);
     answer = a - b;
   }
   const op = isAdd ? '+' : '−';
   const expr = `${a} ${op} ${b} = ?`;
   const distractors = new Set();
   while (distractors.size < 3) {
-    const d = rand(0, 20);
+    const d = rand(range.min - 1 < 0 ? 0 : range.min - 1, range.max);
     if (d !== answer) distractors.add(d);
   }
   return {
@@ -793,9 +879,10 @@ function genCalcQ() {
   };
 }
 
-function genCompareQ() {
+function genCompareQ(params) {
+  const range = params || {min:1, max:19};
   let a, b;
-  do { a = rand(1, 19); b = rand(1, 19); } while (a === b);
+  do { a = rand(range.min, range.max); b = rand(range.min, range.max); } while (a === b);
   const emoji = pick(COUNT_EMOJIS);
   const aEmojis = Array(a).fill(emoji).join('');
   const bEmojis = Array(b).fill(emoji).join('');
@@ -843,8 +930,7 @@ function startStage(mod, stageIndex) {
 
 function exitGame() {
   hideFeedback();
-  const mod = STATE.module;
-  openModule(mod);
+  returnToModuleHome();
 }
 
 // ===================== 渲染题目 =====================
@@ -854,7 +940,7 @@ function renderQuestion() {
   const stageDef = STATE.module === 'pinyin'
     ? PINYIN_STAGES[STATE.stageIndex]
     : MATH_STAGES[STATE.stageIndex];
-  const question = stageDef.gen();
+  const question = stageDef.gen(stageDef.genParams);
 
   STATE.currentAnswer = question.answerText || question.answer;
   STATE.answered = false;
@@ -931,12 +1017,14 @@ function submitAnswer(btn, userAnswer) {
     btn.classList.add('correct');
     STATE.score += 10;
     STATE.correctCount++;
+    recordAnswer(true);
     document.getElementById('game-score').textContent = STATE.score;
     const word = pick(CHEER_WORDS);
-    showFeedback('correct', isCorrect ? '🎉' : '', word);
+    showFeedback('correct', '🎉', word);
     spawnStars(btn);
   } else {
     btn.classList.add('wrong');
+    recordAnswer(false);
     // 高亮正确答案
     document.querySelectorAll('.btn-option').forEach(b=>{
       if (b.textContent.trim() === STATE.currentAnswer) b.classList.add('correct');
@@ -964,44 +1052,63 @@ function finishStage() {
   const correct = STATE.correctCount;
   const score = STATE.score;
   const maxScore = total * 10;
-  const stars = correct >= total ? '🌟🌟🌟' : correct >= total*0.6 ? '🌟🌟' : '🌟';
-  const isModuleLast = STATE.stageIndex >= 2;
+  const passed = correct >= PASS_THRESHOLD;
+  const stars = correct >= total ? '🌟🌟🌟' : passed ? '🌟🌟' : '🌟';
 
-  // 解锁下一关
   const stages = STATE.module === 'pinyin' ? STATE.pinyinStages : STATE.mathStages;
-  stages[STATE.stageIndex] = 'done';
-  if (STATE.stageIndex + 1 < stages.length) {
-    stages[STATE.stageIndex + 1] = 'current';
-  }
 
-  if (isModuleLast && correct >= total * 0.6) {
-    // 全部完成
+  if (passed) {
+    // 标记通关，解锁下一关
+    stages[STATE.stageIndex] = 'done';
+    if (STATE.stageIndex + 1 < stages.length && stages[STATE.stageIndex + 1] !== 'done') {
+      stages[STATE.stageIndex + 1] = 'current';
+    }
+    recordStageCleared();
+  }
+  // 未通过：不标记 done，不解锁，不记录
+
+  const allDone = stages.every(s => s === 'done');
+  if (allDone) {
     showModuleDone(score, maxScore, stars, correct, total);
   } else {
-    showStageDone(score, maxScore, stars, correct, total, isModuleLast);
+    showStageDone(score, maxScore, stars, correct, total, passed);
   }
 }
 
-function showStageDone(score, maxScore, stars, correct, total) {
+function showStageDone(score, maxScore, stars, correct, total, passed) {
   showScreen('stage-done');
   const nextName = STATE.module === 'pinyin'
     ? (PINYIN_STAGES[STATE.stageIndex+1]||{}).name : (MATH_STAGES[STATE.stageIndex+1]||{}).name;
   const hasNext = STATE.stageIndex < 2;
 
+  const passOrFailIcon = passed ? '🎉' : '😅';
+  const passOrFailTitle = passed ? '关卡通过！' : '继续加油！';
+  const passOrFailMsg = passed
+    ? (correct >= total ? '<p style="font-size:var(--font-md);color:var(--success);margin-top:0;">🎉 全对！太厉害了！</p>' : '<p style="font-size:var(--font-md);color:var(--success);margin-top:0;">通过啦！真棒！</p>')
+    : '<p style="font-size:var(--font-md);color:var(--text-light);margin-top:0;">正确率需要达到7/10才能过关，再接再厉哦～💪</p>';
+
+  let buttonsHtml = '';
+  if (passed) {
+    if (hasNext) {
+      buttonsHtml += `<button class="btn btn-primary btn-large" onclick="continueNext()">下一关：${nextName} ▶</button>`;
+    }
+    buttonsHtml += `<button class="btn btn-outline btn-large" onclick="retryStage()">再玩一次 🔄</button>`;
+    buttonsHtml += `<button class="btn btn-outline" onclick="returnToModuleHome()">返回选关</button>`;
+  } else {
+    buttonsHtml += `<button class="btn btn-accent btn-large" onclick="retryStage()">重新挑战 💪</button>`;
+    buttonsHtml += `<button class="btn btn-outline" onclick="returnToModuleHome()">返回选关</button>`;
+  }
+
   document.getElementById('stage-done-content').innerHTML = `
     <div class="result-icon">${stars}</div>
-    <div class="result-title anim-fadeInUp">关卡完成！</div>
+    <div class="result-title anim-fadeInUp">${passOrFailTitle}</div>
     <div class="result-stats">
       <div class="result-stat"><div class="val">${score}</div><div class="lbl">得分</div></div>
       <div class="result-stat"><div class="val">${correct}/${total}</div><div class="lbl">正确</div></div>
     </div>
-    ${correct >= total ? '<p style="font-size:var(--font-md);color:var(--success);margin-top:0;">🎉 全对！太厉害了！</p>' : ''}
-    ${correct < total*0.6 ? '<p style="font-size:var(--font-md);color:var(--text-light);margin-top:0;">继续练习会越来越棒哦～💪</p>' : ''}
+    ${passOrFailMsg}
     <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:10px;">
-      ${hasNext ? `<button class="btn btn-primary btn-large" onclick="continueNext()">下一关：${nextName} ▶</button>` : ''}
-      ${!hasNext ? `<button class="btn btn-primary btn-large" onclick="viewModuleDone()">查看总成绩 🎊</button>` : ''}
-      <button class="btn btn-outline btn-large" onclick="retryStage()">再玩一次 🔄</button>
-      <button class="btn btn-outline" onclick="openModule(STATE.module)">返回列表</button>
+      ${buttonsHtml}
     </div>
   `;
 }
@@ -1025,17 +1132,12 @@ function retryStage() {
   renderQuestion();
 }
 
-function viewModuleDone() {
-  // 计算模块总成绩
-  showModuleDone(STATE.score, QUESTION_PER_STAGE*10, STATE.correctCount>=QUESTION_PER_STAGE?'🌟🌟🌟':'🌟🌟', STATE.correctCount, QUESTION_PER_STAGE);
-}
-
 function showModuleDone(score, maxScore, stars, correct, total) {
   showScreen('module-done');
   const modName = STATE.module === 'pinyin' ? '拼音闯关' : '数学闯关';
   document.getElementById('module-done-content').innerHTML = `
     <div class="result-icon">🏆</div>
-    <div class="result-title anim-fadeInUp">${modName}全部完成！</div>
+    <div class="result-title anim-fadeInUp">${modName}全部通关！</div>
     <div class="result-stars">${stars}</div>
     <div class="result-stats">
       <div class="result-stat"><div class="val">${score}</div><div class="lbl">本次得分</div></div>
@@ -1043,7 +1145,7 @@ function showModuleDone(score, maxScore, stars, correct, total) {
     </div>
     <p style="font-size:var(--font-md);color:var(--text-light);">你真是学习小天才！🌟</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
-      <button class="btn btn-primary btn-large" onclick="openModule(STATE.module)">重新闯关 🔄</button>
+      <button class="btn btn-primary btn-large" onclick="returnToModuleHome()">返回选关 🔄</button>
       <button class="btn btn-outline btn-large" onclick="goHome()">回到首页 🏠</button>
     </div>
   `;
@@ -1086,6 +1188,7 @@ function spawnStars(btn) {
 
 // ===================== 初始化 =====================
 
+updateStatsDisplay();
 renderStages('pinyin');
 renderStages('math');
 </script>
