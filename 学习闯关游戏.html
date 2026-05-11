@@ -832,6 +832,10 @@ function genSpellQ() {
 
 const COUNT_EMOJIS = ['🍎','🍊','🍋','🍇','🍓','🍒','🍑','🥝','🍌','🐶','🐱','🐰','🐼','🐨','🐸'];
 
+// 数字转中文（0-20），用于语音朗读
+const CN_NUM = ['零','一','二','三','四','五','六','七','八','九','十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十'];
+function numToCN(n) { return CN_NUM[n] || String(n); }
+
 function genCountQ(params) {
   const range = params || {min:3, max:15};
   const count = rand(range.min, range.max);
@@ -845,6 +849,7 @@ function genCountQ(params) {
   }
   return {
     prompt: '数一数，一共有几个？',
+    speakText: '数一数，一共有几个？',
     visualEmojis: emojis,
     options: shuffle([answer, ...Array.from(distractors)]).map(String),
     answer: String(answer),
@@ -866,6 +871,8 @@ function genCalcQ(params) {
   }
   const op = isAdd ? '+' : '−';
   const expr = `${a} ${op} ${b} = ?`;
+  const speakOp = isAdd ? '加' : '减';
+  const speakText = `${numToCN(a)} ${speakOp} ${numToCN(b)} 等于几？`;
   const distractors = new Set();
   while (distractors.size < 3) {
     const d = rand(range.min - 1 < 0 ? 0 : range.min - 1, range.max);
@@ -873,6 +880,7 @@ function genCalcQ(params) {
   }
   return {
     prompt: '算一算：',
+    speakText,
     visual: expr,
     options: shuffle([answer, ...Array.from(distractors)]).map(String),
     answer: String(answer),
@@ -889,19 +897,21 @@ function genCompareQ(params) {
   const answer = a > b ? '>' : '<';
   const questionType = rand(0, 1);
   // 问哪个大，或者符号
-  let prompt, visual, options;
+  let prompt, visual, options, speakText;
   if (questionType === 0) {
     prompt = '哪边更多？';
+    speakText = '哪边更多？左边多还是右边多？';
     visual = null; // 特殊渲染
     options = ['左边多', '右边多'];
-    // answer is visual, not option text — 需要特殊处理
   } else {
     prompt = '填什么符号？';
+    speakText = '填什么符号？大于号、小于号，还是等于号？';
     visual = null;
     options = ['>', '<', '='];
   }
   return {
     prompt,
+    speakText,
     visual,
     a, b, aEmojis, bEmojis,
     compareType: questionType,
@@ -967,12 +977,12 @@ function renderQuestion() {
     visualHtml = `<div class="question-visual">${question.visual}</div>`;
   }
 
-  // 语音按钮（拼音题有 speakText 字段）
+  // 语音按钮（有 speakText 字段时显示）
   const speakHtml = question.speakText ? `
     <button class="speak-btn" id="speak-btn" onclick="speakPinyin('${question.speakText}', this)" title="点我重新播放">
       🔊
     </button>
-    <div class="speak-hint">点击喇叭听发音</div>
+    <div class="speak-hint">点喇叭听题目</div>
   ` : '';
 
   const cols = question.options.length === 3 ? 'col-3' : '';
