@@ -356,6 +356,56 @@ button {
 .learn-card .speaker { font-size:0.9rem; }
 .learn-card.playing { background:var(--yellow); border:2px solid var(--orange); animation:pulse 0.6s infinite; }
 
+/* ========== 拼读教学卡片 ========== */
+.learn-grid-spell {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.spell-card {
+  background: #fff; border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex; align-items: center; gap: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  cursor: pointer; transition: all 0.2s;
+  user-select: none; -webkit-user-select: none;
+  border: 2px solid transparent;
+}
+.spell-card:active { transform: scale(0.98); }
+.spell-card.playing {
+  border-color: var(--orange);
+  background: linear-gradient(135deg, #FFF8F0, #FFF3CD);
+  box-shadow: 0 4px 16px rgba(255,154,158,0.3);
+}
+.spell-part {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  min-width: 52px; padding: 8px 6px;
+  border-radius: 12px; background: #f8f8f8;
+  transition: all 0.25s;
+}
+.spell-char {
+  font-size: 1.5rem; font-weight: 900;
+  color: var(--text);
+  transition: color 0.25s;
+}
+.spell-label {
+  font-size: 0.65rem; color: var(--text-light);
+  margin-top: 2px;
+}
+.spell-plus, .spell-arrow {
+  font-size: 1.2rem; font-weight: 900;
+  color: var(--text-light);
+  flex-shrink: 0;
+}
+.spell-part.spell-active {
+  background: var(--pink);
+  transform: scale(1.08);
+  box-shadow: 0 4px 12px rgba(255,154,158,0.5);
+}
+.spell-part.spell-active .spell-char { color: #fff; }
+.spell-part.spell-active .spell-label { color: rgba(255,255,255,0.85); }
+.spell-result { background: #f0f0f0; min-width: 60px; }
+
 /* ========== 语音按钮 ========== */
 .speak-btn {
   display:inline-flex; align-items:center; justify-content:center;
@@ -448,8 +498,9 @@ button {
       <h2>📖 拼音学习</h2>
     </div>
     <div class="learn-tabs">
-      <button class="learn-tab active" id="tab-shengmu" onclick="renderLearn('shengmu')">声母 (23)</button>
-      <button class="learn-tab" id="tab-yunmu" onclick="renderLearn('yunmu')">韵母 (24)</button>
+      <button class="learn-tab active" id="tab-shengmu" onclick="renderLearn('shengmu')">声母</button>
+      <button class="learn-tab" id="tab-yunmu" onclick="renderLearn('yunmu')">韵母</button>
+      <button class="learn-tab" id="tab-spell" onclick="renderLearn('spell')">拼读教学</button>
       <button class="learn-tab" id="tab-yinjie" onclick="renderLearn('yinjie')">简单拼读</button>
       <button class="learn-tab" id="tab-yinjie2" onclick="renderLearn('yinjie2')">进阶拼读</button>
     </div>
@@ -527,6 +578,67 @@ const SHENGMU = ['b','p','m','f','d','t','n','l','g','k','h','j','q','x','zh','c
 
 // 韵母表（24个）
 const YUNMU = ['a','o','e','i','u','ü','ai','ei','ui','ao','ou','iu','ie','üe','er','an','en','in','un','ün','ang','eng','ing','ong'];
+
+// 音节拆解：把拼音拆成声母+韵母
+function decomposeSyllable(syl) {
+  let initial = '', final = syl;
+  for (const s of SHENGMU) {
+    if (syl.startsWith(s) && s.length > initial.length) {
+      initial = s; final = syl.slice(s.length);
+    }
+  }
+  // 零声母（如 a, o, e, ai, an, ang...）
+  if (!initial) { initial = ''; final = syl; }
+  return { initial, final };
+}
+
+// 拼读教学：依次播放 声母 → 韵母 → 音节
+let _spellSeqTimer = null;
+function playSpellSequence(syl, cardEl) {
+  stopSpeak();
+  if (_spellSeqTimer) clearTimeout(_spellSeqTimer);
+  document.querySelectorAll('.spell-card').forEach(c=>c.classList.remove('playing'));
+  if (cardEl) cardEl.classList.add('playing');
+
+  const { initial, final } = decomposeSyllable(syl);
+  const parts = [];
+  if (initial) parts.push({ text: initial, delay: 0 });
+  if (final) parts.push({ text: final, delay: initial ? 600 : 0 });
+  parts.push({ text: syl, delay: (initial ? 600 : 0) + (final ? 600 : 0) });
+
+  // 高亮当前播放的部分
+  const initEl = cardEl?.querySelector('.spell-initial');
+  const finEl = cardEl?.querySelector('.spell-final');
+  const resEl = cardEl?.querySelector('.spell-result');
+
+  function highlight(part) {
+    initEl?.classList.remove('spell-active');
+    finEl?.classList.remove('spell-active');
+    resEl?.classList.remove('spell-active');
+    if (part === 'init' && initEl) initEl.classList.add('spell-active');
+    if (part === 'fin' && finEl) finEl.classList.add('spell-active');
+    if (part === 'res' && resEl) resEl.classList.add('spell-active');
+  }
+
+  if (initial) {
+    highlight('init');
+    speakPinyin(initial);
+  }
+  _spellSeqTimer = setTimeout(() => {
+    if (final) {
+      highlight('fin');
+      speakPinyin(final);
+    }
+    _spellSeqTimer = setTimeout(() => {
+      highlight('res');
+      speakPinyin(syl);
+      _spellSeqTimer = setTimeout(() => {
+        highlight('');
+        if (cardEl) cardEl.classList.remove('playing');
+      }, 1200);
+    }, initial ? 700 : 100);
+  }, initial ? 700 : 100);
+}
 
 // 简单拼读音节（2字母，适合入门）
 const SYLLABLES_EASY = [
@@ -701,15 +813,47 @@ function stopSpeak() {
 // ===================== 学习区渲染 =====================
 function renderLearn(type) {
   stopSpeak();
+  if (_spellSeqTimer) clearTimeout(_spellSeqTimer);
   document.querySelectorAll('.learn-tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('tab-'+type).classList.add('active');
+  const tabEl = document.getElementById('tab-'+type);
+  if (tabEl) tabEl.classList.add('active');
+  const grid = document.getElementById('learn-grid');
+  grid.className = 'learn-grid';
+
+  if (type === 'spell') {
+    // 拼读教学模式：交互式声母+韵母=音节
+    grid.classList.add('learn-grid-spell');
+    const items = SYLLABLES_EASY; // 简单音节做拼读教学
+    grid.innerHTML = items.map((syl,i)=>{
+      const { initial, final } = decomposeSyllable(syl);
+      return `
+        <div class="spell-card anim-fadeInUp" onclick="playSpellSequence('${syl}', this)" style="animation-delay:${i*0.03}s" title="点击听拼读过程">
+          <div class="spell-part spell-initial">
+            <span class="spell-char">${initial || '—'}</span>
+            <span class="spell-label">声母</span>
+          </div>
+          <div class="spell-plus">+</div>
+          <div class="spell-part spell-final">
+            <span class="spell-char">${final}</span>
+            <span class="spell-label">韵母</span>
+          </div>
+          <div class="spell-arrow">→</div>
+          <div class="spell-part spell-result">
+            <span class="spell-char" style="font-size:1.8rem">${syl}</span>
+            <span class="spell-label">拼读</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+    return;
+  }
+
   let items;
   if (type === 'shengmu') items = SHENGMU;
   else if (type === 'yunmu') items = YUNMU;
   else if (type === 'yinjie') items = SYLLABLES_EASY;
   else if (type === 'yinjie2') items = SYLLABLES_HARD;
   else items = SYLLABLES;
-  const grid = document.getElementById('learn-grid');
   grid.innerHTML = items.map(p=>`
     <div class="learn-card anim-fadeInUp" onclick="speakPinyin('${p}', this)" title="点击听发音">
       <span>${p}</span>
