@@ -558,10 +558,7 @@ button {
       <button class="back-btn" onclick="stopSpeak();returnToModuleHome()">←</button>
       <h2>📖 英语学习</h2>
     </div>
-    <div class="learn-tabs">
-      <button class="learn-tab active" id="en-tab-all" onclick="renderEnglishLearn('all')">全部字母</button>
-      <button class="learn-tab" id="en-tab-match" onclick="renderEnglishLearn('match')">大小配对</button>
-    </div>
+    <div class="learn-tabs" style="display:none"></div>
     <div class="learn-grid" id="en-learn-grid"></div>
   </div>
 
@@ -892,7 +889,18 @@ function speakEnglish(text, btnEl) {
   stopSpeak();
   if (!window.speechSynthesis) return;
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'en-US'; u.rate = 0.75; u.pitch = 1.0;
+  u.lang = 'en-US';
+  u.rate = 0.9;
+  u.pitch = 1.0;
+  // 尝试选一个优质的英语语音
+  const voices = speechSynthesis.getVoices();
+  const preferred = voices.find(v => v.lang === 'en-US' && v.name.includes('Google'));
+  if (!preferred) {
+    const fallback = voices.find(v => v.lang.startsWith('en-US'));
+    if (fallback) u.voice = fallback;
+  } else {
+    u.voice = preferred;
+  }
   if (btnEl) btnEl.classList.add('speaking');
   u.onend = ()=>{ if(btnEl) btnEl.classList.remove('speaking'); };
   u.onerror = ()=>{ if(btnEl) btnEl.classList.remove('speaking'); };
@@ -1332,32 +1340,15 @@ function genWordStartQ() {
 // ---- 英语学习渲染 ----
 function renderEnglishLearn(type) {
   stopSpeak();
-  document.querySelectorAll('.learn-tab').forEach(t=>t.classList.remove('active'));
-  const tabEl = document.getElementById('en-tab-'+type);
-  if (tabEl) tabEl.classList.add('active');
   const grid = document.getElementById('en-learn-grid');
-
-  if (type === 'all') {
-    // 全部字母卡片：大写+小写配对显示
-    grid.innerHTML = LETTERS.map((u,i)=>`
-      <div class="en-letter-card anim-fadeInUp" onclick="speakEnglish('${u}', this)" style="animation-delay:${i*0.03}s" title="点击听发音">
-        <span class="en-upper">${u}</span>
-        <span class="en-lower">${LETTERS_LOWER[i]}</span>
-        <span class="speaker">🔊</span>
-      </div>
-    `).join('');
-  } else if (type === 'match') {
-    // 大小写配对练习
-    const items = shuffle([...LETTERS]).slice(0, 12);
-    grid.innerHTML = items.map((u,i)=>`
-      <div class="en-match-card anim-fadeInUp" onclick="speakEnglish('${u}', this)" style="animation-delay:${i*0.04}s">
-        <span class="en-upper">${u}</span>
-        <span class="en-arrow">↔</span>
-        <span class="en-lower">${LETTER_MAP[u]}</span>
-        <span class="speaker">🔊</span>
-      </div>
-    `).join('');
-  }
+  // 全部字母卡片：大写+小写配对显示
+  grid.innerHTML = LETTERS.map((u,i)=>`
+    <div class="en-letter-card anim-fadeInUp" onclick="speakEnglish('${u}', this)" style="animation-delay:${i*0.03}s" title="点击听发音">
+      <span class="en-upper">${u}</span>
+      <span class="en-lower">${LETTERS_LOWER[i]}</span>
+      <span class="speaker">🔊</span>
+    </div>
+  `).join('');
 }
 
 // ===================== 倒计时 =====================
