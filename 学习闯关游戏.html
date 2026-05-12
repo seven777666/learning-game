@@ -885,22 +885,30 @@ function stopSpeak() {
 }
 
 // ---- 英语语音（en-US）----
+let _enVoice = null;
+function _initEnVoice() {
+  if (_enVoice) return;
+  const voices = speechSynthesis.getVoices();
+  if (!voices.length) return;
+  // 优先选高质量英语语音：Google > Microsoft Natural > 任意 en-US
+  _enVoice = voices.find(v => v.lang === 'en-US' && v.name.includes('Google'))
+    || voices.find(v => v.lang === 'en-US' && v.name.includes('Natural'))
+    || voices.find(v => v.lang.startsWith('en-US'))
+    || null;
+}
+// 页面加载时预加载语音列表（异步）
+speechSynthesis.onvoiceschanged = _initEnVoice;
+_initEnVoice();
+
 function speakEnglish(text, btnEl) {
   stopSpeak();
   if (!window.speechSynthesis) return;
+  // 大写字母转小写，避免被读成 "Capital A"
+  if (text.length === 1 && text >= 'A' && text <= 'Z') text = text.toLowerCase();
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'en-US';
-  u.rate = 0.9;
-  u.pitch = 1.0;
-  // 尝试选一个优质的英语语音
-  const voices = speechSynthesis.getVoices();
-  const preferred = voices.find(v => v.lang === 'en-US' && v.name.includes('Google'));
-  if (!preferred) {
-    const fallback = voices.find(v => v.lang.startsWith('en-US'));
-    if (fallback) u.voice = fallback;
-  } else {
-    u.voice = preferred;
-  }
+  u.lang = 'en-US'; u.rate = 0.9; u.pitch = 1.0;
+  _initEnVoice();
+  if (_enVoice) u.voice = _enVoice;
   if (btnEl) btnEl.classList.add('speaking');
   u.onend = ()=>{ if(btnEl) btnEl.classList.remove('speaking'); };
   u.onerror = ()=>{ if(btnEl) btnEl.classList.remove('speaking'); };
