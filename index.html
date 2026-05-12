@@ -202,6 +202,11 @@ button {
 }
 .score-display { font-weight:700; font-size:var(--font-md); white-space:nowrap; }
 .question-counter { font-size:var(--font-sm); color:var(--text-light); white-space:nowrap; }
+.timer-display {
+  font-weight:900; font-size:var(--font-md); white-space:nowrap;
+  color: var(--pink); min-width:60px; text-align:center;
+}
+.timer-display.urgent { color: var(--error); animation: pulse 0.6s infinite; }
 
 .game-area {
   flex:1; display:flex; flex-direction:column; align-items:center;
@@ -434,6 +439,38 @@ button {
 .learn-entry .icon { font-size:2.2rem; }
 .learn-entry .info h3 { font-size:var(--font-md); }
 .learn-entry .info span { font-size:var(--font-sm); color:var(--text-light); }
+
+	/* ========== 英语学习卡片 ========== */
+	.en-letter-card {
+	  background:#fff; border-radius:var(--radius-sm);
+	  padding:14px 8px; text-align:center;
+	  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+	  cursor:pointer; transition:all 0.2s;
+	  font-size:1.8rem; font-weight:900; color:var(--text);
+	  min-height:64px; display:flex; flex-direction:column;
+	  align-items:center; justify-content:center; gap:2px;
+	  user-select:none; -webkit-user-select:none;
+	}
+	.en-letter-card .en-upper { font-size:1.8rem; }
+	.en-letter-card .en-lower { font-size:1.2rem; color:var(--text-light); }
+	.en-letter-card .speaker { font-size:0.9rem; display:block; margin-top:2px; }
+	.en-letter-card:active { transform:scale(0.93); background:#FFF5F5; }
+	.en-letter-card.playing { background:var(--yellow); border:2px solid var(--orange); animation:pulse 0.6s infinite; }
+	.en-match-card {
+	  background:#fff; border-radius:var(--radius-sm);
+	  padding:14px 8px; text-align:center;
+	  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+	  cursor:pointer; transition:all 0.2s;
+	  min-height:64px; display:flex; align-items:center;
+	  justify-content:center; gap:8px;
+	  user-select:none; -webkit-user-select:none;
+	}
+	.en-match-card .en-upper { font-size:1.8rem; font-weight:900; color:var(--text); }
+	.en-match-card .en-lower { font-size:1.8rem; font-weight:900; color:var(--pink); }
+	.en-match-card .en-arrow { font-size:1.4rem; color:var(--text-light); }
+	.en-match-card .speaker { font-size:0.9rem; display:block; }
+	.en-match-card:active { transform:scale(0.93); }
+	.en-match-card.playing { background:var(--yellow); border:2px solid var(--orange); animation:pulse 0.6s infinite; }
 </style>
 </head>
 <body>
@@ -474,6 +511,14 @@ button {
         </div>
         <div class="arrow">▶</div>
       </div>
+      <div class="module-card anim-fadeInUp" onclick="openModule('english')" style="animation-delay:0.3s">
+        <div class="icon">🔡</div>
+        <div class="info">
+          <h2>英语闯关</h2>
+          <p>字母认读 · 大小配对</p>
+        </div>
+        <div class="arrow">▶</div>
+      </div>
     </div>
   </div>
 
@@ -507,6 +552,19 @@ button {
     <div class="learn-grid" id="learn-grid"></div>
   </div>
 
+  <!-- ========== 英语学习界面 ========== -->
+  <div class="screen" id="screen-english-learn">
+    <div class="module-header">
+      <button class="back-btn" onclick="stopSpeak();returnToModuleHome()">←</button>
+      <h2>📖 英语学习</h2>
+    </div>
+    <div class="learn-tabs">
+      <button class="learn-tab active" id="en-tab-all" onclick="renderEnglishLearn('all')">全部字母</button>
+      <button class="learn-tab" id="en-tab-match" onclick="renderEnglishLearn('match')">大小配对</button>
+    </div>
+    <div class="learn-grid" id="en-learn-grid"></div>
+  </div>
+
   <!-- ========== 数学模块首页 ========== -->
   <div class="screen" id="screen-math-home">
     <div class="module-header">
@@ -516,10 +574,25 @@ button {
     <div class="stage-list" id="math-stages"></div>
   </div>
 
+  <!-- ========== 英语模块首页 ========== -->
+  <div class="screen" id="screen-english-home">
+    <div class="module-header">
+      <button class="back-btn" onclick="goHome()">←</button>
+      <h2>🔡 英语闯关</h2>
+    </div>
+    <div class="learn-entry anim-fadeInUp" onclick="showScreen('english-learn');renderEnglishLearn('all')">
+      <div class="icon">📖</div>
+      <div class="info"><h3>学习字母</h3><span>点读字母，认识大小写</span></div>
+      <div style="font-size:1.5rem">▶</div>
+    </div>
+    <div class="stage-list" id="english-stages"></div>
+  </div>
+
   <!-- ========== 游戏界面 ========== -->
   <div class="screen" id="screen-game">
     <div class="game-header">
       <button class="back-btn" onclick="exitGame()" style="font-size:1.5rem;width:40px;height:40px;">✕</button>
+      <span class="timer-display" id="timer-display">⏱ 60″</span>
       <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
       <span class="score-display">⭐ <span id="game-score">0</span></span>
       <span class="question-counter" id="question-counter"></span>
@@ -555,20 +628,24 @@ button {
 
 // ---- 可配置项 ----
 const QUESTION_PER_STAGE = 10;
-const PASS_THRESHOLD = 7; // 答对7题即可过关
+const PASS_THRESHOLD = 7;
+const STAGE_TIME = 60; // 每关60秒倒计时
 
 // ---- 全局状态 ----
 const STATE = {
-  module: null,           // 'pinyin' | 'math'
+  module: null,           // 'pinyin' | 'math' | 'english'
   stageIndex: 0,
   questionIndex: 0,
   score: 0,
   correctCount: 0,
   currentAnswer: null,
   answered: false,
+  timeLeft: STAGE_TIME,
+  timerInterval: null,
   // 各模块关卡完成状态: 'locked' | 'current' | 'done'
   pinyinStages: ['current','locked','locked','locked','locked'],
   mathStages: ['current','locked','locked','locked','locked','locked'],
+  englishStages: ['current','locked','locked','locked','locked','locked'],
 };
 
 // ===================== 题库 =====================
@@ -810,6 +887,19 @@ function stopSpeak() {
   document.querySelectorAll('.speaking').forEach(e=>e.classList.remove('speaking'));
 }
 
+// ---- 英语语音（en-US）----
+function speakEnglish(text, btnEl) {
+  stopSpeak();
+  if (!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-US'; u.rate = 0.75; u.pitch = 1.0;
+  if (btnEl) btnEl.classList.add('speaking');
+  u.onend = ()=>{ if(btnEl) btnEl.classList.remove('speaking'); };
+  u.onerror = ()=>{ if(btnEl) btnEl.classList.remove('speaking'); };
+  window.speechSynthesis.speak(u);
+  _speakTimer = setTimeout(()=>{ if(btnEl) btnEl.classList.remove('speaking'); }, 4000);
+}
+
 // ===================== 学习区渲染 =====================
 function renderLearn(type) {
   stopSpeak();
@@ -899,7 +989,7 @@ function openModule(mod) {
     }
     renderStages('pinyin');
     showScreen('pinyin-home');
-  } else {
+  } else if (mod === 'math') {
     const hasProgress = STATE.mathStages.some(s => s === 'done');
     if (!hasProgress) {
       STATE.mathStages = ['current','locked','locked','locked','locked','locked'];
@@ -909,6 +999,16 @@ function openModule(mod) {
     }
     renderStages('math');
     showScreen('math-home');
+  } else if (mod === 'english') {
+    const hasProgress = STATE.englishStages.some(s => s === 'done');
+    if (!hasProgress) {
+      STATE.englishStages = ['current','locked','locked','locked','locked','locked'];
+    }
+    if (STATE.englishStages.every(s => s === 'locked')) {
+      STATE.englishStages[0] = 'current';
+    }
+    renderStages('english');
+    showScreen('english-home');
   }
 }
 
@@ -920,15 +1020,18 @@ function returnToModuleHome() {
   } else if (STATE.module === 'math') {
     renderStages('math');
     showScreen('math-home');
+  } else if (STATE.module === 'english') {
+    renderStages('english');
+    showScreen('english-home');
   } else {
     goHome();
   }
 }
 
 function renderStages(mod) {
-  const containerId = mod === 'pinyin' ? 'pinyin-stages' : 'math-stages';
-  const stages = mod === 'pinyin' ? STATE.pinyinStages : STATE.mathStages;
-  const stageDefs = mod === 'pinyin' ? PINYIN_STAGES : MATH_STAGES;
+  const containerId = mod === 'pinyin' ? 'pinyin-stages' : mod === 'math' ? 'math-stages' : 'english-stages';
+  const stages = mod === 'pinyin' ? STATE.pinyinStages : mod === 'math' ? STATE.mathStages : STATE.englishStages;
+  const stageDefs = mod === 'pinyin' ? PINYIN_STAGES : mod === 'math' ? MATH_STAGES : ENGLISH_STAGES;
 
   let html = '';
   stageDefs.forEach((s,i)=>{
@@ -1146,10 +1249,149 @@ function genCompareQ(params) {
   };
 }
 
+// ---- 英语关卡定义 ----
+const ENGLISH_STAGES = [
+  { name:'第一关：大写字母', desc:'认识A~Z', difficulty:'⭐', gen:genUpperQ, genParams:null },
+  { name:'第二关：小写字母', desc:'认识a~z', difficulty:'⭐⭐', gen:genLowerQ, genParams:null },
+  { name:'第三关：大小配对', desc:'大写找小写', difficulty:'⭐⭐⭐', gen:genMatchQ, genParams:null },
+  { name:'第四关：听音辨字', desc:'听发音选字母', difficulty:'⭐⭐⭐⭐', gen:genLetterSoundQ, genParams:null },
+  { name:'第五关：字母排序', desc:'填缺失字母', difficulty:'⭐⭐⭐⭐⭐', gen:genLetterOrderQ, genParams:null },
+  { name:'第六关：单词首字母', desc:'听单词选首字母', difficulty:'⭐⭐⭐⭐⭐⭐', gen:genWordStartQ, genParams:null },
+];
+
+// ---- 英语题库 ----
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const LETTERS_LOWER = 'abcdefghijklmnopqrstuvwxyz'.split('');
+const LETTER_MAP = {};
+
+LETTERS.forEach((u,i) => { LETTER_MAP[u] = LETTERS_LOWER[i]; LETTER_MAP[LETTERS_LOWER[i]] = u; });
+
+// 简单英文单词（用于首字母练习）
+const SIMPLE_WORDS = [
+  { word:'apple', letter:'a' }, { word:'book', letter:'b' }, { word:'cat', letter:'c' },
+  { word:'dog', letter:'d' }, { word:'egg', letter:'e' }, { word:'fish', letter:'f' },
+  { word:'girl', letter:'g' }, { word:'hat', letter:'h' }, { word:'ice', letter:'i' },
+  { word:'jump', letter:'j' }, { word:'king', letter:'k' }, { word:'lion', letter:'l' },
+  { word:'moon', letter:'m' }, { word:'nose', letter:'n' }, { word:'open', letter:'o' },
+  { word:'pig', letter:'p' }, { word:'queen', letter:'q' }, { word:'rain', letter:'r' },
+  { word:'sun', letter:'s' }, { word:'tree', letter:'t' }, { word:'up', letter:'u' },
+  { word:'van', letter:'v' }, { word:'water', letter:'w' }, { word:'box', letter:'x' },
+  { word:'yes', letter:'y' }, { word:'zoo', letter:'z' },
+];
+
+// ---- 英语题目生成 ----
+function genUpperQ() {
+  const correct = pick(LETTERS);
+  const distractors = randDistinct(LETTERS.filter(l=>l!==correct), 3);
+  return { prompt:'选出对应的字母：', speakText:correct, visual:correct, options:shuffle([correct,...distractors]), answer:correct };
+}
+function genLowerQ() {
+  const correct = pick(LETTERS_LOWER);
+  const distractors = randDistinct(LETTERS_LOWER.filter(l=>l!==correct), 3);
+  return { prompt:'选出对应的字母：', speakText:correct, visual:correct, options:shuffle([correct,...distractors]), answer:correct };
+}
+function genMatchQ() {
+  const qType = Math.random() > 0.5;
+  if (qType) { // 大写 → 找小写
+    const correctUpper = pick(LETTERS);
+    const correctLower = LETTER_MAP[correctUpper];
+    const distractors = randDistinct(LETTERS_LOWER.filter(l=>l!==correctLower), 3);
+    return { prompt:`${correctUpper} 的小写是？`, speakText:correctUpper, visual:correctUpper,
+      options:shuffle([correctLower,...distractors]), answer:correctLower };
+  } else { // 小写 → 找大写
+    const correctLower = pick(LETTERS_LOWER);
+    const correctUpper = LETTER_MAP[correctLower];
+    const distractors = randDistinct(LETTERS.filter(l=>l!==correctUpper), 3);
+    return { prompt:`${correctLower} 的大写是？`, speakText:correctLower, visual:correctLower,
+      options:shuffle([correctUpper,...distractors]), answer:correctUpper };
+  }
+}
+function genLetterSoundQ() {
+  const correct = pick(LETTERS);
+  const distractors = randDistinct(LETTERS.filter(l=>l!==correct), 3);
+  return { prompt:'听发音，选出你听到的字母：', speakText:correct, visual:'?',
+    options:shuffle([correct,...distractors]), answer:correct };
+}
+function genLetterOrderQ() {
+  const start = rand(0, 23);
+  const correct = LETTERS[start + 2]; // 缺中间那个
+  const distractors = randDistinct(LETTERS.filter(l=>l!==correct), 3);
+  return { prompt:'填缺失的字母：', speakText:`${LETTERS[start+1]} ${LETTERS[start+3]}`,
+    visual:`${LETTERS[start+1]} _ ${LETTERS[start+3]}`,
+    options:shuffle([correct,...distractors]), answer:correct };
+}
+function genWordStartQ() {
+  const item = pick(SIMPLE_WORDS);
+  const correct = item.letter.toUpperCase();
+  const distractors = randDistinct(LETTERS.filter(l=>l!==correct), 3);
+  const hint = item.word[0] + '...  ' + item.word;
+  return { prompt:'这个单词的首字母是？', speakText:item.word, visual:hint,
+    options:shuffle([correct,...distractors]), answer:correct };
+}
+
+// ---- 英语学习渲染 ----
+function renderEnglishLearn(type) {
+  stopSpeak();
+  document.querySelectorAll('.learn-tab').forEach(t=>t.classList.remove('active'));
+  const tabEl = document.getElementById('en-tab-'+type);
+  if (tabEl) tabEl.classList.add('active');
+  const grid = document.getElementById('en-learn-grid');
+
+  if (type === 'all') {
+    // 全部字母卡片：大写+小写配对显示
+    grid.innerHTML = LETTERS.map((u,i)=>`
+      <div class="en-letter-card anim-fadeInUp" onclick="speakEnglish('${u}', this)" style="animation-delay:${i*0.03}s" title="点击听发音">
+        <span class="en-upper">${u}</span>
+        <span class="en-lower">${LETTERS_LOWER[i]}</span>
+        <span class="speaker">🔊</span>
+      </div>
+    `).join('');
+  } else if (type === 'match') {
+    // 大小写配对练习
+    const items = shuffle([...LETTERS]).slice(0, 12);
+    grid.innerHTML = items.map((u,i)=>`
+      <div class="en-match-card anim-fadeInUp" onclick="speakEnglish('${u}', this)" style="animation-delay:${i*0.04}s">
+        <span class="en-upper">${u}</span>
+        <span class="en-arrow">↔</span>
+        <span class="en-lower">${LETTER_MAP[u]}</span>
+        <span class="speaker">🔊</span>
+      </div>
+    `).join('');
+  }
+}
+
+// ===================== 倒计时 =====================
+
+function startTimer() {
+  stopTimer();
+  STATE.timeLeft = STAGE_TIME;
+  updateTimerDisplay();
+  STATE.timerInterval = setInterval(() => {
+    STATE.timeLeft--;
+    updateTimerDisplay();
+    if (STATE.timeLeft <= 0) {
+      stopTimer();
+      // 时间到，自动结束
+      hideFeedback();
+      finishStage();
+    }
+  }, 1000);
+}
+function stopTimer() {
+  if (STATE.timerInterval) { clearInterval(STATE.timerInterval); STATE.timerInterval = null; }
+}
+function updateTimerDisplay() {
+  const el = document.getElementById('timer-display');
+  if (!el) return;
+  el.textContent = `⏱ ${STATE.timeLeft}″`;
+  el.classList.toggle('urgent', STATE.timeLeft <= 10);
+}
+
 // ===================== 开始关卡 =====================
 
 function startStage(mod, stageIndex) {
-  const stages = mod === 'pinyin' ? STATE.pinyinStages : STATE.mathStages;
+  const stages = mod === 'pinyin' ? STATE.pinyinStages
+    : mod === 'math' ? STATE.mathStages : STATE.englishStages;
   if (stages[stageIndex] === 'locked') return;
 
   STATE.module = mod;
@@ -1160,11 +1402,13 @@ function startStage(mod, stageIndex) {
   STATE.answered = false;
 
   showScreen('game');
+  startTimer();
   renderQuestion();
 }
 
 function exitGame() {
   hideFeedback();
+  stopTimer();
   returnToModuleHome();
 }
 
@@ -1172,9 +1416,9 @@ function exitGame() {
 
 function renderQuestion() {
   stopSpeak();
-  const stageDef = STATE.module === 'pinyin'
-    ? PINYIN_STAGES[STATE.stageIndex]
-    : MATH_STAGES[STATE.stageIndex];
+  const stageDef = STATE.module === 'pinyin' ? PINYIN_STAGES[STATE.stageIndex]
+    : STATE.module === 'math' ? MATH_STAGES[STATE.stageIndex]
+    : ENGLISH_STAGES[STATE.stageIndex];
   const question = stageDef.gen(stageDef.genParams);
 
   STATE.currentAnswer = question.answerText || question.answer;
@@ -1223,11 +1467,15 @@ function renderQuestion() {
     </div>
   `;
 
-  // 拼音题自动播放发音
+  // 自动播放发音（拼音/数学用中文TTS，英语用英文TTS）
   if (question.speakText) {
     setTimeout(()=>{
       const btn = document.getElementById('speak-btn');
-      speakPinyin(question.speakText, btn);
+      if (STATE.module === 'english') {
+        speakEnglish(question.speakText, btn);
+      } else {
+        speakPinyin(question.speakText, btn);
+      }
     }, 300);
   }
 }
@@ -1283,6 +1531,7 @@ function submitAnswer(btn, userAnswer) {
 // ===================== 完成关卡 =====================
 
 function finishStage() {
+  stopTimer();
   const total = QUESTION_PER_STAGE;
   const correct = STATE.correctCount;
   const score = STATE.score;
@@ -1290,7 +1539,8 @@ function finishStage() {
   const passed = correct >= PASS_THRESHOLD;
   const stars = correct >= total ? '🌟🌟🌟' : passed ? '🌟🌟' : '🌟';
 
-  const stages = STATE.module === 'pinyin' ? STATE.pinyinStages : STATE.mathStages;
+  const stages = STATE.module === 'pinyin' ? STATE.pinyinStages
+    : STATE.module === 'math' ? STATE.mathStages : STATE.englishStages;
 
   if (passed) {
     // 标记通关，解锁下一关
@@ -1312,9 +1562,12 @@ function finishStage() {
 
 function showStageDone(score, maxScore, stars, correct, total, passed) {
   showScreen('stage-done');
-  const nextName = STATE.module === 'pinyin'
-    ? (PINYIN_STAGES[STATE.stageIndex+1]||{}).name : (MATH_STAGES[STATE.stageIndex+1]||{}).name;
-  const hasNext = STATE.stageIndex < 2;
+  const stageDefs = STATE.module === 'pinyin' ? PINYIN_STAGES
+    : STATE.module === 'math' ? MATH_STAGES : ENGLISH_STAGES;
+  const nextName = (stageDefs[STATE.stageIndex+1]||{}).name || '';
+  const stages = STATE.module === 'pinyin' ? STATE.pinyinStages
+    : STATE.module === 'math' ? STATE.mathStages : STATE.englishStages;
+  const hasNext = STATE.stageIndex + 1 < stages.length && stages[STATE.stageIndex + 1] !== 'done';
 
   const passOrFailIcon = passed ? '🎉' : '😅';
   const passOrFailTitle = passed ? '关卡通过！' : '继续加油！';
@@ -1369,7 +1622,7 @@ function retryStage() {
 
 function showModuleDone(score, maxScore, stars, correct, total) {
   showScreen('module-done');
-  const modName = STATE.module === 'pinyin' ? '拼音闯关' : '数学闯关';
+  const modName = STATE.module === 'pinyin' ? '拼音闯关' : STATE.module === 'math' ? '数学闯关' : '英语闯关';
   document.getElementById('module-done-content').innerHTML = `
     <div class="result-icon">🏆</div>
     <div class="result-title anim-fadeInUp">${modName}全部通关！</div>
@@ -1426,6 +1679,7 @@ function spawnStars(btn) {
 updateStatsDisplay();
 renderStages('pinyin');
 renderStages('math');
+renderStages('english');
 </script>
 </body>
 </html>
